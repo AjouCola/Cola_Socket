@@ -195,6 +195,7 @@ const getSocket = (
     });
     socket.on("disconnect", () => {
       console.log("disconnect", socket.id);
+      RoomUser[GATHER_ROOM_CODE][socket.id] = undefined;
     });
   });
 };
