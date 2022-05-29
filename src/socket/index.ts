@@ -1,4 +1,3 @@
-import { MESSAGE } from "@src/constant";
 import { TYPE } from "@src/type";
 import { Server, Socket } from "socket.io";
 import { DefaultEventsMap } from "socket.io/dist/typed-events";
@@ -46,16 +45,6 @@ const createRoomCode = () => {
     if (!(code in Object.keys(RoomList))) return code;
   }
 };
-
-const createUserInfo =
-  (name: string) => (x: number, y: number) => (cId: number) => ({
-    name,
-    x,
-    y,
-    direction: "down",
-    state: "mid",
-    cId,
-  });
 
 const findDefaultCharacterPosition = (mapId: number) =>
   defaultMapSetting[mapId].character;
@@ -106,13 +95,13 @@ const getSocket = (
       ) => {
         const code = GATHER_ROOM_CODE;
         if (RoomList[code] !== undefined)
-          done({ status: "FAILED", message: MESSAGE.EXIST, code });
+          done({ status: "FAILED", message: "방이 존재합니다.", code });
         else {
           RoomList[code] = 0;
           RoomUser[code] = {};
           done({
             status: "SUCESS",
-            message: MESSAGE.CREATE,
+            message: "성공적으로 방을 만들었습니다.",
             code,
           });
         }
@@ -122,58 +111,88 @@ const getSocket = (
     socket.on(
       TYPE.JOIN_ROOM,
       (user: IUser, code: string, done: (userData: IUserData) => void) => {
-        const { id, name, cId } = user;
-        if (!id) return;
-
         socket.join(code);
-        userSocketList.push({ id, socket: socket.id });
-        RoomUser[code][id] = createUserInfo(name)(1800, 1800)(cId);
-        done(createUserInfo(name)(1800, 1800)(cId));
-        socketIO.to(code).emit("makeRoomClient", code, RoomUser[code]);
+        userSocketList.push({ id: user.id, socket: socket.id });
+        if (user.id) {
+          RoomUser[code][user.id] = {
+            name: user.name,
+            x: 1800,
+            y: 1800,
+            direction: "down",
+            state: "mid",
+            cId: user.cId,
+          };
+
+          done({
+            name: user.name,
+            x: 1800,
+            y: 1800,
+            direction: "down",
+            state: "mid",
+            cId: user.cId,
+          });
+          socketIO.to(code).emit("makeRoomClient", code, RoomUser[code]);
+        }
       }
     );
 
     socket.on(TYPE.LEAVE_ROOM, async (user: IUser, code: any) => {
       socket.leave(code);
-      if (!user.id) return;
-      try {
-        delete RoomUser[code][user.id];
-      } catch (e) {
-        console.log(e);
+      if (user.id) {
+        try {
+          delete RoomUser[code][user.id];
+        } catch (e) {
+          console.log(e);
+        }
+        socketIO.to(code).emit("makeRoomClient", code, RoomUser[code]);
+        socketIO.to(code).emit("changeMove", RoomUser[code], null);
       }
-      socketIO.to(code).emit("makeRoomClient", code, RoomUser[code]);
-      socketIO.to(code).emit("changeMove", RoomUser[code], null);
     });
 
     socket.on(TYPE.CHARACTER_MOVE, (props: any) => {
-      if (!socket.id) return;
-      const { user, code, tempBackground } = props;
-      const { x, y } = findDefaultCharacterPosition(RoomList[code]);
-      RoomUser[code][socket.id] = user
-        ? user
-        : createUserInfo(user.name)(x, y)(user.cId);
-      socketIO
-        .to(code)
-        .emit(
-          "changeMove",
-          RoomUser[code],
-          isContain(tempBackground, RoomList[code]) ? tempBackground : undefined
-        );
+      const user: any = props.user;
+      const code: string = props.room;
+      const tempBackground: any = props.tempBackground;
+      if (socket.id) {
+        RoomUser[code][socket.id] = user
+          ? {
+              ...user,
+            }
+          : {
+              name: user.name,
+              x: findDefaultCharacterPosition(RoomList[code]).x,
+              y: findDefaultCharacterPosition(RoomList[code]).y,
+              direction: "down",
+              state: "mid",
+              cId: user.cId,
+            };
+        socketIO
+          .to(code)
+          .emit(
+            "changeMove",
+            RoomUser[code],
+            isContain(tempBackground, RoomList[code])
+              ? tempBackground
+              : undefined
+          );
+      }
     });
 
     socket.on(TYPE.SEND_MESSAGE, (chat: IChat) => {
       const { status } = chat;
-      const room = RoomUser[GATHER_ROOM_CODE][socket.id];
-
-      if (status === "Everyone")
+      if (status === "Everyone") {
         socket.broadcast.emit(TYPE.RECEIVE_MESSAGE, chat);
-      else if (status === "Nearby")
-        findAdjacentUserList(room, GATHER_ROOM_CODE).map((user: string) =>
-          socketIO.to(user).emit(TYPE.RECEIVE_MESSAGE, chat)
+      } else if (status === "Nearby") {
+        findAdjacentUserList(
+          RoomUser[GATHER_ROOM_CODE][socket.id],
+          GATHER_ROOM_CODE
+        ).map((element: string) =>
+          socketIO.to(element).emit(TYPE.RECEIVE_MESSAGE, chat)
         );
-      else socket.to(status).emit(TYPE.RECEIVE_MESSAGE, chat);
+      } else {
+        socket.to(status).emit(TYPE.RECEIVE_MESSAGE, chat);
+      }
     });
-
     socket.on("disconnect", () => {
       console.log("disconnect", socket.id);
     });
