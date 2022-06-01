@@ -5,7 +5,7 @@ const createApplication = () => {
   const app = express();
   app.use(
     cors({
-      origin: process.env.CLIENT,
+      origin: ["http://localhost:3000", "http://localhost:443"],
       credentials: true,
     })
   );
