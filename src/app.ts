@@ -5,7 +5,13 @@ const createApplication = () => {
   const app = express();
   app.use(
     cors({
-      origin: ["http://localhost:3000", "http://localhost:443"],
+      origin: [
+        "http://localhost:3000",
+        "http://localhost:443",
+        "https://cola.or.kr",
+        "https://cola.or.kr:443",
+        "https://cola.or.kr",
+      ],
       credentials: true,
     })
   );
